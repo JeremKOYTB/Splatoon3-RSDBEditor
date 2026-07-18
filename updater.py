@@ -70,7 +70,6 @@ APP_VERSION = get_current_app_version()
 
 BASE_FONT = "\"Segoe UI Variable\", \"Segoe UI\", \"Roboto\", sans-serif"
 
-
 S3RE_MAIN_LOGO = b"""<?xml version="1.0" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 20010904//EN"
  "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
@@ -498,8 +497,12 @@ class UpdaterWindow(QMainWindow):
         try:
             if os.path.exists(start_bat):
                 if os.name == 'nt':
-                    os.chdir(self.install_dir)
-                    os.startfile(start_bat)
+                    subprocess.Popen(
+                        f'start "" "{start_bat}"', 
+                        cwd=self.install_dir, 
+                        shell=True, 
+                        creationflags=0x00000010  # CREATE_NEW_CONSOLE
+                    )
                 else:
                     subprocess.Popen([start_bat], cwd=self.install_dir)
             elif os.path.exists(main_script_1):
@@ -522,6 +525,8 @@ class UpdaterWindow(QMainWindow):
                 subprocess.Popen([sys.executable, main_script_2], **kwargs)
         except Exception:
             pass
+            
+        time.sleep(1.0)
         sys.exit(0)
 
     def check_system_theme(self):
@@ -1147,5 +1152,5 @@ if __name__ == "__main__":
     timer.start(500)
     timer.timeout.connect(lambda: None)
     signal.signal(signal.SIGINT, lambda sig, frame: handle_interrupt(window))
-    
     sys.exit(app.exec())
+    
