@@ -4,7 +4,7 @@ A simple tool to edit and customize Splatoon 3 RSDB (Resource database) files fo
 
 It allows you to modify weapon loadouts (Sub weapons, Special weapons, and Special points) using an intuitive interface, or dive deep into the raw BYML data.
 
-
+<img width="3750" height="2142" alt="image" src="https://github.com/user-attachments/assets/4017141e-552a-4fbe-af7f-1274587b8769" />
 
 ---
 
