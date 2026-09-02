@@ -91,7 +91,7 @@ First, ensure you have the full game files extracted on your PC. You do not need
 **4. Saving and applying changes**
  * Once you are finished, click **Save Changes** and choose where to save your modified `.rstbl.byml.zs` files. You can then close the script.
 * To apply these changes in-game, place the new files exactly in this path on your SD card (replace `XXX` with your game version, e.g., `b20`):
-  `sd:/atmosphere/contents/0100C2500FC20000/RomFS/RSDB/`
+  `sd:/atmosphere/contents/0100C2500FC20000/romfs/RSDB/`
 
 > ⚠️ Warning regarding game updates:
 > When the game updates, it is highly likely that the RSDB files are also updated. Your previous modifications will then stop working. 
