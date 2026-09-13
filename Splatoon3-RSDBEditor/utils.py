@@ -48,7 +48,7 @@ if not os.path.exists(CACHE_DIR):
 def load_config():
     if os.path.exists(CONFIG_FILE):
         try:
-            with open(CONFIG_FILE, "r") as f:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e: 
             log(f"[ERROR] Cannot read config file: {e}")
@@ -56,8 +56,8 @@ def load_config():
 
 def save_config(data):
     try:
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(data, f)
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
     except Exception as e: 
         log(f"[ERROR] Cannot save configuration: {e}")
 
@@ -79,6 +79,8 @@ def get_favorites(): return set(load_config().get("favorites", []))
 def save_favorites(fav_set): save_config({**load_config(), "favorites": list(fav_set)})
 def get_saved_language(): return load_config().get("language", "English (US)")
 def save_language(lang_name): save_config({**load_config(), "language": lang_name})
+def get_badge_notice_dismissed(): return load_config().get("badge_notice_dismissed", False)
+def save_badge_notice_dismissed(state): save_config({**load_config(), "badge_notice_dismissed": state})
 
 def install_requirements():
     log("[SYSTEM] Checking dependencies...")

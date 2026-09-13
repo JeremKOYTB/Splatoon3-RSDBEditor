@@ -1,11 +1,12 @@
 import sys
 import os
-import signal
-import darkdetect
-import json
 
 from utils import install_requirements
 install_requirements()
+
+import signal
+import json
+import darkdetect
 
 from PyQt6.QtWidgets import QApplication, QDialog
 from PyQt6.QtGui import QColor
@@ -14,9 +15,9 @@ from PyQt6.QtCore import Qt, QTimer
 from ui_layout import get_stylesheet
 from main_window import SplatoonRSDBEditor
 from components import OnlineWarningDialog
-from utils import log
+from utils import log, CONFIG_FILE
 
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.1.5"
 
 if __name__ == "__main__":
     if os.name == 'nt':
@@ -50,7 +51,7 @@ if __name__ == "__main__":
     timer.timeout.connect(lambda: None)
     
     def show_online_warning():
-        config_path = "splatoon_RSDBeditor_config.json"
+        config_path = CONFIG_FILE
         config = {}
         
         if os.path.exists(config_path):

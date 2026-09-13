@@ -44,7 +44,7 @@ class TreeHandler:
                                     raw_data_j = child_j.data(0, Qt.ItemDataRole.UserRole + 2)
                                     TreeHandler.add_items(child_j, raw_data_j, None, None, is_cancelled_cb)
                                 child_j.setExpanded(True)
-                        
+                                
         tree_w.setUpdatesEnabled(True)
 
     @staticmethod
@@ -76,9 +76,8 @@ class TreeHandler:
                 for i in range(item.childCount() - 1, -1, -1):
                     stack.append(item.child(i))
                     
-                count += 1
+                    count += 1
                 
-                # OPTIMISATION : Ne met à jour l'UI que tous les dixièmes de seconde pour débloquer le processeur
                 if time.time() - last_update > 0.1:
                     if progress_cb: progress_cb(count, 0)
                     QApplication.processEvents()
@@ -177,7 +176,6 @@ class TreeHandler:
                 TreeHandler._setup_node(it, v, force_expand=force_expand, is_cancelled_cb=is_cancelled_cb)
                 children_to_add.append(it)
                 
-                # OPTIMISATION : Ne met à jour l'UI que tous les dixièmes de seconde pour débloquer le processeur
                 if tree and time.time() - last_update > 0.1:
                     if progress_cb: progress_cb(i, total)
                     QApplication.processEvents()

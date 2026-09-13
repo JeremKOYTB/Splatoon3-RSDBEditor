@@ -2,7 +2,6 @@ import os
 import re
 import json
 import requests
-import concurrent.futures
 import zipfile
 import io
 import shutil
@@ -13,43 +12,6 @@ from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButt
 
 from translations import t
 from utils import CACHE_DIR, log
-
-class CacheBuilderWorker(QThread):
-    progress = pyqtSignal(int, int)
-    finished = pyqtSignal()
-
-    def __init__(self, missing_images, get_urls_callback):
-        super().__init__()
-        self.missing_images = missing_images
-        self.get_urls_callback = get_urls_callback
-
-    def download_image(self, img_filename):
-        local_path = os.path.join(CACHE_DIR, img_filename)
-        urls_to_try = self.get_urls_callback(img_filename)
-            
-        for url in urls_to_try:
-            try:
-                resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
-                if resp.status_code == 200:
-                    image = QImage()
-                    image.loadFromData(resp.content)
-                    if not image.isNull():
-                        with open(local_path, "wb") as f: f.write(resp.content)
-                        return
-            except Exception: pass
-
-    def run(self):
-        missing_list = list(self.missing_images)
-        total, completed = len(missing_list), 0
-
-        if total > 0:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-                futures = {executor.submit(self.download_image, img): img for img in missing_list}
-                for future in concurrent.futures.as_completed(futures):
-                    completed += 1
-                    self.progress.emit(completed, total)
-
-        self.finished.emit()
 
 class ImageDownloadWorker(QThread):
     finished = pyqtSignal(QImage)
@@ -302,25 +264,109 @@ class OnlineWarningDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(t("warn_online_title"))
         self.setFixedWidth(550)
-        
+        self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
+
+        if os.name == 'nt':
+            try:
+                import darkdetect
+                if darkdetect.isDark():
+                    import ctypes
+                    val_dark = ctypes.c_int(1)
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        int(self.winId()), 20, ctypes.byref(val_dark), 4
+                    )
+                    val_border = ctypes.c_uint(0xFFFFFFFE)
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        int(self.winId()), 34, ctypes.byref(val_border), 4
+                    )
+            except Exception:
+                pass
+
         layout = QVBoxLayout(self)
-        layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetFixedSize)
-        
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(14)
+
         self.lbl = QLabel(t("warn_online_msg"))
         self.lbl.setWordWrap(True)
         self.lbl.setStyleSheet("font-size: 11pt;")
         layout.addWidget(self.lbl)
-        
+
         self.chk_confirm = QCheckBox(t("chk_online_confirm"))
         layout.addWidget(self.chk_confirm)
-        
+
         btn_layout = QHBoxLayout()
-        self.btn_yes = QPushButton(t("btn_continue"))
-        self.btn_yes.clicked.connect(self.accept)
-        
+        btn_layout.setSpacing(10)
+
         btn_no = QPushButton(t("diff_btn_close"))
+        btn_no.setStyleSheet(
+            "QPushButton { background-color: #34495e; color: white; padding: 8px 16px; border-radius: 6px; border: none; outline: none; } "
+            "QPushButton:hover { background-color: #2c3e50; }"
+        )
         btn_no.clicked.connect(self.reject)
-        
+
+        self.btn_yes = QPushButton(t("btn_continue"))
+        self.btn_yes.setStyleSheet(
+            "QPushButton { background-color: #27ae60; color: white; font-weight: bold; padding: 8px 16px; border-radius: 6px; border: none; outline: none; } "
+            "QPushButton:hover { background-color: #2ecc71; }"
+        )
+        self.btn_yes.clicked.connect(self.accept)
+
         btn_layout.addWidget(btn_no)
         btn_layout.addWidget(self.btn_yes)
+        layout.addLayout(btn_layout)
+
+class BadgeNoticeDialog(QDialog):
+    def __init__(self, badge_count, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(t("badge_notice_title"))
+        self.setFixedWidth(580)
+        self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
+
+        if os.name == 'nt':
+            try:
+                import darkdetect
+                if darkdetect.isDark():
+                    import ctypes
+                    val_dark = ctypes.c_int(1)
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        int(self.winId()), 20, ctypes.byref(val_dark), 4
+                    )
+                    val_border = ctypes.c_uint(0xFFFFFFFE)
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        int(self.winId()), 34, ctypes.byref(val_border), 4
+                    )
+            except Exception:
+                pass
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(14)
+
+        self.lbl = QLabel(t("badge_notice_desc", badge_count))
+        self.lbl.setWordWrap(True)
+        self.lbl.setStyleSheet("font-size: 10pt; line-height: 140%;")
+        layout.addWidget(self.lbl)
+
+        self.chk_dont_show = QCheckBox(t("chk_online_confirm"))
+        layout.addWidget(self.chk_dont_show)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
+
+        self.btn_back = QPushButton(t("btn_badge_back"))
+        self.btn_back.setStyleSheet(
+            "QPushButton { background-color: #34495e; color: white; padding: 8px 16px; border-radius: 6px; border: none; outline: none; } "
+            "QPushButton:hover { background-color: #2c3e50; }"
+        )
+        self.btn_back.clicked.connect(self.reject)
+
+        self.btn_confirm = QPushButton(t("btn_badge_confirm"))
+        self.btn_confirm.setStyleSheet(
+            "QPushButton { background-color: #27ae60; color: white; font-weight: bold; padding: 8px 16px; border-radius: 6px; border: none; outline: none; } "
+            "QPushButton:hover { background-color: #2ecc71; }"
+        )
+        self.btn_confirm.clicked.connect(self.accept)
+
+        btn_layout.addWidget(self.btn_back)
+        btn_layout.addWidget(self.btn_confirm)
         layout.addLayout(btn_layout)

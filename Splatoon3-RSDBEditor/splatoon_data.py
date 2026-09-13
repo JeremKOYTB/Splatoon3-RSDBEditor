@@ -12,6 +12,9 @@ class SplatoonDataManager:
     def __init__(self):
         self.localization_data = {}
 
+    def _resolve_image_name(self, img_name):
+        return img_name if img_name else "Dummy.png"
+
     def is_file_outdated(self, url, local_path):
         try:
             response = requests.head(url, timeout=5)
@@ -58,23 +61,101 @@ class SplatoonDataManager:
                 return items[key]
         return default
 
+    def guess_badge_info(self, badge_dict):
+        name = badge_dict.get("Name", "")
+        if not name:
+            row_id = badge_dict.get("__RowId", "")
+            name = row_id.replace("Work/Gyml/BadgeInfo_", "").replace("Work/Gyml/", "").replace(".spl__BadgeInfo.gyml", "")
+            
+        img_name = f"Badge_{name}.png" if name else "Dummy.png"
+        msg_label = badge_dict.get("MsgLabelEx") or ""
+        sub1_str = badge_dict.get("Sub1_Str") or ""
+        
+        keys_to_search = []
+        if msg_label:
+            keys_to_search.append(msg_label)
+        if name:
+            keys_to_search.append(name)
+            
+        if sub1_str and sub1_str in name:
+            clean_name = name.replace(f"_{sub1_str}", "")
+            keys_to_search.append(clean_name)
+            
+        found_title = None
+        for cat in ["CommonMsg/Badge/BadgeMsg", "CommonMsg/Badge/BadgeName", "CommonMsg/Badge/BadgeInfo"]:
+            if cat in self.localization_data:
+                dict_cat = self.localization_data[cat]
+                for k in keys_to_search:
+                    if k in dict_cat:
+                        val = dict_cat[k].strip()
+                        if val:
+                            found_title = val
+                            break
+            if found_title:
+                break
+                
+        if not found_title:
+            for k in keys_to_search:
+                val = self._find_json_value(k, None)
+                if val:
+                    found_title = str(val).strip()
+                    break
+                    
+        if not found_title:
+            found_title = name
+
+        replacement = ""
+        if sub1_str:
+            enemy_cat = self.localization_data.get("CommonMsg/Coop/CoopEnemy", {})
+            if sub1_str in enemy_cat:
+                replacement = enemy_cat[sub1_str].strip()
+            else:
+                replacement = self._find_json_value(sub1_str, sub1_str)
+        elif "WeaponLevel_" in name:
+            m = re.match(r'WeaponLevel_(.*)_Lv\d+', name)
+            if m:
+                w_id = m.group(1)
+                replacement = self.get_exact_translation(w_id, w_id)
+
+        if replacement:
+            found_title = re.sub(r'\[group=[^\]]+\]', replacement, found_title)
+
+        found_title = re.sub(r'\[(?:group|color|params|type)[^\]]*\]\s*:?\s*', '', found_title)
+        found_title = re.sub(r'\[/[a-zA-Z]+\]', '', found_title)
+        found_title = re.sub(r'\[[^\]]*\]', '', found_title)
+        found_title = re.sub(r'\s+', ' ', found_title).strip()
+
+        return found_title, self._resolve_image_name(img_name)
+
     def guess_image_and_name(self, internal_name, verbose=False):
-        if not internal_name: return "Unknown", "Dummy.png", False, ""
+        if not internal_name: 
+            return "Unknown", "Dummy.png", False, ""
         
-        if internal_name in ["WeaponFree", "Free"]: return t("name_unarmed"), "Win_Tricol.png", True, "Free"
-        if internal_name in ["WeaponSpIkuraShoot", "SpIkuraShoot"]: return "Smallfry", "SakelienSmall.png", True, "SpIkuraShoot"
+        if internal_name in ["WeaponFree", "Free"]: 
+            return t("name_unarmed"), "Dummy.png", True, "Free"
+        if internal_name in ["WeaponSpIkuraShoot", "SpIkuraShoot"]: 
+            return t("name_smallfry"), self._resolve_image_name("SakelienSmall.png"), True, "SpIkuraShoot"
         
-        if "SalmonBuddy" in internal_name: return "SalmonBuddy", "Wsb_SalmonBuddy00.png", True, "SalmonBuddy"
-        if "Drone" in internal_name: return "SpDroneBuddy", "Wsp_SpDroneBuddySdodr00.png", True, "SpDroneBuddy"
+        if "SalmonBuddy" in internal_name: 
+            return t("name_salmonbuddy"), self._resolve_image_name("Wsb_SalmonBuddy00.png"), True, "SalmonBuddy"
+        if "Drone" in internal_name: 
+            return t("name_drone"), self._resolve_image_name("Wsp_SpDroneBuddySdodr00.png"), True, "SpDroneBuddy"
         
         clean = internal_name.replace("Weapon_", "") 
         
+        if "Shooter_Normal_S" in clean:
+            img = "Path_Wst_Shooter_Normal_S.png"
+            for suffix in ["_Coop", "Coop", "_Mission", "Mission", "_Msn", "Msn", "_Hero", "Hero", "_Rival", "Rival", "_Sdodr", "Sdodr", "ForEventMatch"]:
+                clean = clean.replace(suffix, "")
+            clean = re.sub(r'Lv\d+', '', clean).strip('_')
+            return clean, self._resolve_image_name(img), True, clean
+
         if "Shooter_MissionLv" in clean or "Shooter_Normal_H" in clean:
             img = "Path_Wst_Shooter_Normal_H.png"
             for suffix in ["_Coop", "Coop", "_Mission", "Mission", "_Msn", "Msn", "_Hero", "Hero", "_Rival", "Rival", "_Sdodr", "Sdodr", "ForEventMatch"]:
                 clean = clean.replace(suffix, "")
             clean = re.sub(r'Lv\d+', '', clean).strip('_')
-            return clean, img, True, clean
+            return clean, self._resolve_image_name(img), True, clean
         
         sdodr_overrides = {
             "Brush_Sdodr": "Wst_Brush_Normal_O.png",
@@ -96,7 +177,7 @@ class SplatoonDataManager:
             for suffix in ["_Coop", "Coop", "_Mission", "Mission", "_Msn", "Msn", "_Hero", "Hero", "_Rival", "Rival", "_Sdodr", "Sdodr", "ForEventMatch"]:
                 clean = clean.replace(suffix, "")
             clean = re.sub(r'Lv\d+', '', clean).strip('_')
-            return clean, img, True, clean
+            return clean, self._resolve_image_name(img), True, clean
         
         for suffix in ["_Coop", "Coop", "_Mission", "Mission", "_Msn", "Msn", "_Hero", "Hero", "_Rival", "Rival", "_Sdodr", "Sdodr", "ForEventMatch"]:
             clean = clean.replace(suffix, "")
@@ -104,12 +185,13 @@ class SplatoonDataManager:
         
         if clean.startswith("Bomb_") or clean in ["PointSensor", "PoisonMist", "LineMarker", "Sprinkler", "Shield", "Trap", "Beacon"]:
             img_clean = "Bomb_Splash" if "Bomb_Splash_Big" in internal_name else clean
-            return clean, f"Wsb_{img_clean}00.png", True, clean
+            return clean, self._resolve_image_name(f"Wsb_{img_clean}00.png"), True, clean
             
         if clean.startswith("Sp") and not clean.startswith("Spinner"):
             base_sp = clean.split('_')[0]
-            if base_sp in ["SpGachihoko", "SpGachihokoForEventMatch"]: return clean, "Wsp_Shachihoko.png", True, clean
-            return clean, f"Wsp_{base_sp}00.png", True, clean
+            if base_sp in ["SpGachihoko", "SpGachihokoForEventMatch"]: 
+                return clean, self._resolve_image_name("Wsp_Shachihoko.png"), True, clean
+            return clean, self._resolve_image_name(f"Wsp_{base_sp}00.png"), True, clean
                 
         parts = clean.split('_')
         weapon_class = parts[0]
@@ -142,18 +224,18 @@ class SplatoonDataManager:
         else:
             img = f"Wst_{weapon_class}_{weapon_type}_{variant}.png"
             
-        return clean, img, True, clean
+        return clean, self._resolve_image_name(img), True, clean
 
     def get_exact_translation(self, internal_name, json_key, return_is_hardcoded=False):
         if not internal_name: 
             return ("Unknown", False) if return_is_hardcoded else "Unknown"
         
         custom_hardcoded = {
-            "SplPlayer": "Player",
+            "SplPlayer": t("name_player"),
             "WeaponFree": t("name_unarmed"),
             "Free": t("name_unarmed"),
-            "SpIkuraShoot": "Smallfry",
-            "SalmonBuddy": "Smallfry"
+            "SpIkuraShoot": t("name_smallfry"),
+            "SalmonBuddy": t("name_smallfry")
         }
         
         for key, val in custom_hardcoded.items():
@@ -219,10 +301,10 @@ class SplatoonDataManager:
             tag = self._find_json_value("Coop", t("tag_coop"))
             suffix_tag = f" - {tag}"
         elif "ForEventMatch" in internal_name:
-            tag = self._find_json_value("League", "Match Challenge")
+            tag = self._find_json_value("League", t("tag_challenge"))
             suffix_tag = f" - {tag}"
         elif "Sdodr" in internal_name:
-            tag = self._find_json_value("Category_SideOrder_00", "Side Order")
+            tag = self._find_json_value("Category_SideOrder_00", t("tag_side_order"))
             suffix_tag = f" - {tag}"
         elif any(m in internal_name for m in ["Mission", "Rival", "Hero", "_Msn", "Lv"]) or "SalmonBuddy" in internal_name or "Drone" in internal_name or "IkuraShoot" in internal_name:
             tag = self._find_json_value("ModeMission", t("tag_hero"))

@@ -27,7 +27,7 @@ if "--install-dir" in sys.argv:
 
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLabel, QPushButton, QFrame, 
-                             QMessageBox, QComboBox, QCheckBox, QSizePolicy,
+                             QMessageBox, QComboBox, QCheckBox, QSizePolicy, 
                              QGraphicsOpacityEffect, QTextEdit)
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QByteArray, QPropertyAnimation, QAbstractAnimation, QDir
 from PyQt6.QtGui import QIcon, QPixmap, QTextOption
@@ -239,18 +239,17 @@ def load_editor_config():
     }
     
     for base_dir in base_dirs:
-        for sub_path in ["splatoon_RSDBeditor_config.json", os.path.join("Splatoon3-RSDBEditor", "splatoon_RSDBeditor_config.json")]:
-            config_path = os.path.join(base_dir, sub_path)
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                        for k in cfg:
-                            if k in data:
-                                cfg[k] = data[k]
-                    return cfg
-                except Exception:
-                    pass
+        config_path = os.path.join(base_dir, "Splatoon3-RSDBEditor", "splatoon_RSDBeditor_config.json")
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    for k in cfg:
+                        if k in data:
+                            cfg[k] = data[k]
+                return cfg
+            except Exception:
+                pass
     return cfg
 
 def get_stylesheet(theme_name, accent_color):
@@ -350,9 +349,7 @@ class DownloadWorkerThread(QThread):
 
             protected_paths = [
                 os.path.normcase(os.path.abspath(os.path.join(self.install_dir, "Splatoon3-RSDBEditor", "cache"))),
-                os.path.normcase(os.path.abspath(os.path.join(self.install_dir, "Splatoon3-RSDBEditor", "splatoon_RSDBeditor_config.json"))),
-                os.path.normcase(os.path.abspath(os.path.join(self.install_dir, "cache"))),
-                os.path.normcase(os.path.abspath(os.path.join(self.install_dir, "splatoon_RSDBeditor_config.json")))
+                os.path.normcase(os.path.abspath(os.path.join(self.install_dir, "Splatoon3-RSDBEditor", "splatoon_RSDBeditor_config.json")))
             ]
 
             for root_dir, dirs, files in os.walk(self.install_dir, topdown=False):
@@ -489,6 +486,9 @@ class UpdaterWindow(QMainWindow):
         
         self.fetch_all_releases()
 
+    def get_app_icon(self):
+        return get_app_icon()
+
     def relaunch_app(self):
         start_bat = os.path.join(self.install_dir, "Start.bat")
         main_script_1 = os.path.join(self.install_dir, "main.py")
@@ -501,7 +501,7 @@ class UpdaterWindow(QMainWindow):
                         f'start "" "{start_bat}"', 
                         cwd=self.install_dir, 
                         shell=True, 
-                        creationflags=0x00000010  # CREATE_NEW_CONSOLE
+                        creationflags=0x00000010
                     )
                 else:
                     subprocess.Popen([start_bat], cwd=self.install_dir)
@@ -1086,7 +1086,7 @@ class MainBranchCommitFetchThread(QThread):
 
 def handle_interrupt(window_instance):
     box = QMessageBox(window_instance)
-    box.setWindowIcon(window_instance.get_app_icon())
+    box.setWindowIcon(get_app_icon())
     box.setIcon(QMessageBox.Icon.Question)
     box.setWindowTitle("Exit?")
     box.setText("Ctrl+C was detected in the terminal.\n\nDo you want to close the updater?")
@@ -1153,4 +1153,3 @@ if __name__ == "__main__":
     timer.timeout.connect(lambda: None)
     signal.signal(signal.SIGINT, lambda sig, frame: handle_interrupt(window))
     sys.exit(app.exec())
-    

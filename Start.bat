@@ -53,7 +53,7 @@ if "!LANG_CODE!"=="FR" (
     set "MSG_REQ_PY=[ERREUR] Python 3.11 ou 3.12 est requis pour garantir la compatibilité."
     set "MSG_INSTALL_TITLE=INSTALLATION DE PYTHON"
     set "MSG_INSTALL_DESC=Python 3.12 est strictement requis pour installer les librairies de l'éditeur."
-    set "MSG_PROMPT_INSTALL=Voulez-vous l'installer maintenant ? [y/n]: "
+    set "MSG_PROMPT_INSTALL=Voulez-vous l'installer maintenant ? [o/n]: "
     set "MSG_FIND_PY=[2/3] Préparation du téléchargement de Python 3.12..."
     set "MSG_PY_FOUND=[INFO] Version ciblée - Téléchargement en cours :"
     set "MSG_DL_FAIL=[ERREUR] Échec du téléchargement."

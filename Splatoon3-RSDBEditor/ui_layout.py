@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
 from PyQt6.QtCore import Qt, QSize, QByteArray, QRegularExpression
 from PyQt6.QtGui import QAction, QCursor, QImage, QPainter, QIcon, QPixmap, QFontMetrics, QFont, QRegularExpressionValidator
 
+import translations
 from translations import t
 from utils import get_hide_filenames, get_hide_coop, get_hide_mission, get_hide_notfound, log, CACHE_DIR
 
@@ -189,24 +190,24 @@ def get_stylesheet(is_dark):
         QFrame#Card { background-color: rgba(255, 255, 255, 180); border-radius: 8px; border: 1px solid rgba(0, 0, 0, 30); }
         QPushButton { border-radius: 6px; padding: 6px 14px; border: 1px solid rgba(0, 0, 0, 40); background-color: rgba(255, 255, 255, 255); outline: none; color: #1D1D1F; }
         QPushButton:focus { outline: none; }
-        QPushButton:hover { background-color: rgba(0, 0, 0, 10); }
-        QPushButton:pressed { background-color: rgba(0, 0, 0, 20); }
+        QPushButton:hover { background-color: rgba(0, 0, 10); }
+        QPushButton:pressed { background-color: rgba(0, 0, 20); }
         QComboBox, QLineEdit, QSpinBox { border-radius: 6px; padding: 5px; border: 1px solid rgba(0, 0, 0, 40); background-color: rgba(255, 255, 255, 255); color: #1D1D1F; }
         QComboBox::drop-down { border: none; }
         QTableWidget, QTreeWidget { border: none; background-color: transparent; outline: none; color: #1D1D1F; }
         QTableWidget::item { padding: 4px; background-color: transparent; border: none; }
         QTableWidget::item:selected, QTableWidget::item:selected:!active { background-color: #0078D7; color: white; border: none; outline: none; }
-        QTableWidget::item:hover { background-color: rgba(0, 0, 0, 10); }
+        QTableWidget::item:hover { background-color: rgba(0, 0, 10); }
         QTreeWidget:focus { outline: none; }
         QTreeWidget::item { padding: 4px; }
         QTreeWidget QLineEdit { background-color: #ffffff; color: #1D1D1F; border: 1px solid #0078D7; border-radius: 0px; padding: 0px 2px; margin: -1px 0px; }
         QMenu { background-color: #ffffff; color: #1D1D1F; border: 1px solid #cccccc; }
         QMenu::item:selected { background-color: #0078D7; color: white; }
         #btnSocial { background-color: transparent; border: none; padding: 2px; border-radius: 4px; }
-        #btnSocial:hover { background-color: rgba(0, 0, 0, 10); }
+        #btnSocial:hover { background-color: rgba(0, 0, 10); }
         QMenuBar { border-bottom: 1px solid rgba(0, 0, 0, 40); background-color: transparent; }
         QMenuBar::item { padding: 6px 12px; background-color: transparent; border: none; outline: none; color: #1D1D1F; }
-        QMenuBar::item:selected { background-color: rgba(0, 0, 0, 10); border-radius: 4px; }
+        QMenuBar::item:selected { background-color: rgba(0, 0, 10); border-radius: 4px; }
         QHeaderView::section { background-color: rgba(240, 240, 245, 255); color: #1D1D1F; padding: 4px; border: none; border-bottom: 1px solid rgba(0, 0, 0, 40); border-right: 1px solid rgba(0, 0, 0, 40); }
         #CountLabel { color: #555555; font-weight: bold; margin-bottom: 5px; }
         """
@@ -363,12 +364,12 @@ class UILayoutMixin:
         central_widget = QWidget(self)
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(15, 28, 15, 15)
-        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(10)
 
         top_grid = QGridLayout()
         top_grid.setVerticalSpacing(8)
-        top_grid.setHorizontalSpacing(15)
+        top_grid.setHorizontalSpacing(12)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText(t("search_placeholder"))
@@ -454,62 +455,65 @@ class UILayoutMixin:
 
         self.btn_preload = QPushButton(t("btn_preload_ram"))
         self.btn_preload.setFixedHeight(40)
-        self.btn_preload.setFixedWidth(220)
+        self.btn_preload.setFixedWidth(200)
         self.btn_preload.setStyleSheet("background-color: #9b59b6; color: white; font-weight: bold; border-radius: 6px; border: none;")
         self.btn_preload.clicked.connect(self.preload_ram)
         self.btn_preload.setVisible(False)
 
         self.btn_zero_all = QPushButton()
-        self.btn_zero_all.setStyleSheet("background-color: #e74c3c; color: white; font-weight: bold; padding: 2px 14px;")
+        self.btn_zero_all.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                font-weight: bold;
+                padding: 2px 10px;
+                border-radius: 6px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+            QPushButton:disabled {
+                background-color: rgba(231, 76, 60, 0.35);
+                color: rgba(255, 255, 255, 0.4);
+            }
+        """)
         self.btn_zero_all.setFixedHeight(40)
-        self.btn_zero_all.setFixedWidth(220)
-        
-        balanced_text = self.get_balanced_text(self.btn_zero_all, t("btn_zero_special"), 220)
+        self.btn_zero_all.setFixedWidth(200)
+        self.btn_zero_all.setEnabled(False)
+        balanced_text = self.get_balanced_text(self.btn_zero_all, t("btn_zero_special"), 200)
         self.btn_zero_all.setText(balanced_text)
-        self.btn_zero_all.clicked.connect(self.zero_all_special_points)
+        self.btn_zero_all.clicked.connect(self.on_red_button_clicked if hasattr(self, 'on_red_button_clicked') else self.zero_all_special_points)
 
         self.btn_mode = QPushButton("")
         self.btn_mode.setStyleSheet("font-weight: bold;")
         self.btn_mode.setFixedHeight(40)
-        self.btn_mode.setFixedWidth(220)
+        self.btn_mode.setFixedWidth(200)
         self.btn_mode.clicked.connect(self.toggle_mode)
 
         self.btn_open = QPushButton(t("btn_open"))
         self.btn_open.setFixedHeight(40)
-        self.btn_open.setFixedWidth(220)
+        self.btn_open.setFixedWidth(200)
         self.btn_open.clicked.connect(self.open_rsdb_folder)
 
         self.btn_save = QPushButton(t("btn_save"))
         self.btn_save.setFixedHeight(40)
-        self.btn_save.setFixedWidth(220)
+        self.btn_save.setFixedWidth(200)
         self.btn_save.clicked.connect(self.save_rsdb_folder)
 
-        self.version_lbl = QLabel("")
-        self.version_lbl.setStyleSheet("color: #EEEEEE; font-style: italic; font-weight: bold;")
-
         top_grid.addWidget(self.search_input, 0, 0)
-        top_grid.addWidget(self.chk_hide_filenames, 0, 2)
-        top_grid.addWidget(self.chk_hide_notfound, 0, 3)
-        top_grid.addWidget(self.center_wrapper, 0, 2, 2, 2, Qt.AlignmentFlag.AlignCenter)
-        top_grid.addWidget(self.btn_preload, 0, 5)
-        top_grid.addWidget(self.btn_zero_all, 0, 5)
-        top_grid.addWidget(self.btn_mode, 0, 6)
+        top_grid.addWidget(self.chk_hide_filenames, 0, 1)
+        top_grid.addWidget(self.chk_hide_notfound, 0, 2)
+        top_grid.addWidget(self.btn_zero_all, 0, 4)
+        top_grid.addWidget(self.btn_preload, 0, 4)
+        top_grid.addWidget(self.btn_mode, 0, 5)
 
         top_grid.addLayout(lang_layout, 1, 0)
-        top_grid.addWidget(self.chk_hide_coop, 1, 2)
-        top_grid.addWidget(self.chk_hide_mission, 1, 3)
-        top_grid.addWidget(self.btn_open, 1, 5)
-        top_grid.addWidget(self.btn_save, 1, 6)
-
-        top_grid.addWidget(self.version_lbl, 2, 5, 1, 2, Qt.AlignmentFlag.AlignRight)
-
-        top_grid.setColumnStretch(0, 0)
-        top_grid.setColumnStretch(1, 1) 
-        top_grid.setColumnStretch(2, 0)
-        top_grid.setColumnStretch(3, 0)
-        top_grid.setColumnStretch(4, 1) 
-        top_grid.setColumnStretch(5, 0)
-        top_grid.setColumnStretch(6, 0)
+        top_grid.addWidget(self.chk_hide_coop, 1, 1)
+        top_grid.addWidget(self.chk_hide_mission, 1, 2)
+        top_grid.addWidget(self.center_wrapper, 1, 3, Qt.AlignmentFlag.AlignCenter)
+        top_grid.addWidget(self.btn_open, 1, 4)
+        top_grid.addWidget(self.btn_save, 1, 5)
 
         main_layout.addLayout(top_grid)
 
@@ -519,6 +523,7 @@ class UILayoutMixin:
         self.left_frame.setObjectName("Card")
         left_panel_layout = QVBoxLayout(self.left_frame)
         left_panel_layout.setContentsMargins(10, 10, 10, 10)
+        left_panel_layout.setSpacing(8)
         
         self.count_lbl = QLabel("")
         self.count_lbl.setObjectName("CountLabel")
@@ -541,9 +546,42 @@ class UILayoutMixin:
         
         left_panel_layout.addWidget(self.table_w)
         
+        bottom_left_layout = QHBoxLayout()
+        bottom_left_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_left_layout.setSpacing(6)
+
+        self.btn_unlock_shop = QPushButton()
+        self.btn_unlock_shop.setObjectName("btn_unlock_shop")
+        self.btn_unlock_shop.setStyleSheet("""
+            QPushButton#btn_unlock_shop {
+                background-color: #2980b9;
+                color: white;
+                font-weight: bold;
+                padding: 4px 8px;
+                border-radius: 6px;
+                border: none;
+            }
+            QPushButton#btn_unlock_shop:hover {
+                background-color: #3498db;
+            }
+            QPushButton#btn_unlock_shop:disabled {
+                background-color: rgba(41, 128, 185, 0.4);
+                color: rgba(255, 255, 255, 0.4);
+            }
+        """)
+        self.btn_unlock_shop.setFixedHeight(34)
+        if hasattr(self, 'unlock_all_shop_weapons'):
+            self.btn_unlock_shop.clicked.connect(self.unlock_all_shop_weapons)
+
         self.btn_update = QPushButton(f"Splatoon 3 RSDB Editor (v{self.APP_VERSION})")
+        self.btn_update.setFixedHeight(34)
         self.btn_update.clicked.connect(self.launch_updater)
-        left_panel_layout.addWidget(self.btn_update)
+
+        self.version_lbl = QLabel("")
+
+        bottom_left_layout.addWidget(self.btn_update, 1)
+
+        left_panel_layout.addLayout(bottom_left_layout)
         
         self.btn_update.setIcon(QIcon())
         self.update_icon_overlay = QLabel(self.btn_update)
@@ -587,17 +625,16 @@ class UILayoutMixin:
         self.lbl_weapon_title = QLabel(t("lbl_weapon_name"))
         self.lbl_weapon_title.setStyleSheet("font-size: 18pt; font-weight: bold; margin-left: 15px;")
         self.lbl_weapon_title.setWordWrap(True)
-        
         self.lbl_weapon_title.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.lbl_weapon_title.customContextMenuRequested.connect(self.on_title_context_menu)
         
         header_layout.addWidget(self.img_lbl)
         header_layout.addWidget(self.lbl_weapon_title, 1)
         easy_layout.addLayout(header_layout)
-        easy_layout.addSpacing(70)
+        easy_layout.addSpacing(40)
         
         form_layout = QFormLayout()
-        form_layout.setSpacing(25)
+        form_layout.setSpacing(20)
         form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft) 
         
         self.combo_sub = QComboBox()
@@ -606,7 +643,6 @@ class UILayoutMixin:
         self.combo_sub.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.combo_sub.setMinimumContentsLength(10)
         self.combo_sub.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        
         self.combo_sub.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.combo_sub.customContextMenuRequested.connect(self.on_combo_sub_context_menu)
         
@@ -616,7 +652,6 @@ class UILayoutMixin:
         self.combo_special.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.combo_special.setMinimumContentsLength(10)
         self.combo_special.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        
         self.combo_special.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.combo_special.customContextMenuRequested.connect(self.on_combo_special_context_menu)
         
@@ -640,7 +675,7 @@ class UILayoutMixin:
         right_layout.addWidget(self.right_stack)
         self.splitter.addWidget(self.right_frame)
         
-        self.splitter.setSizes([380, 820])
+        self.splitter.setSizes([340, 860])
         main_layout.addWidget(self.splitter, 1)
         
         self.combo_sub.installEventFilter(self)
@@ -672,7 +707,6 @@ class UILayoutMixin:
 
     def apply_mode(self):
         self.manage_checkboxes_for_mode()
-        
         self.btn_mode.setText(t('mode_expert') if self.is_easy_mode else t('mode_easy'))
         
         if self.is_easy_mode:
@@ -738,9 +772,12 @@ class UILayoutMixin:
         self.btn_we.setText(t("btn_we"))
         self.btn_preload.setText(t("btn_preload_ram"))
         
-        balanced_text = self.get_balanced_text(self.btn_zero_all, t("btn_zero_special"), 220)
+        balanced_text = self.get_balanced_text(self.btn_zero_all, t("btn_zero_special"), 200)
         self.btn_zero_all.setText(balanced_text)
         
+        if hasattr(self, 'btn_unlock_shop'):
+            self.btn_unlock_shop.setText(t("btn_unlock_shop"))
+
         self.btn_mode.setText(t('mode_expert') if self.is_easy_mode else t('mode_easy'))
         
         if self.is_easy_mode:

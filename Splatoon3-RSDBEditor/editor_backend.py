@@ -3,20 +3,129 @@ import sys
 import subprocess
 import re
 import copy
+import queue
+import threading
+import itertools
 from collections import Counter
+import requests
+from requests.adapters import HTTPAdapter
 
 import zstandard as zstd
 import byml
 
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 from translations import t
-from components import WECheckWorker, WEDownloadWorker, CacheBuilderWorker
-from ui_layout import CacheDialog
+from components import WECheckWorker, WEDownloadWorker
 from utils import (log, get_last_rsdb_dir, set_last_rsdb_dir, get_last_save_dir, 
                    set_last_save_dir, CACHE_DIR)
 from tree_handler import TreeHandler
+
+class ProgressiveCacheWorker(QThread):
+    progress = pyqtSignal(int, int)
+    image_loaded = pyqtSignal(str)
+    finished = pyqtSignal()
+
+    def __init__(self, missing_images, url_resolver, priority_count=0):
+        super().__init__()
+        self.missing_images = missing_images
+        self.url_resolver = url_resolver
+        self.priority_count = priority_count
+        self.is_cancelled = False
+        
+        self.task_queue = queue.PriorityQueue()
+        self.counter = itertools.count()
+        self.lock = threading.Lock()
+        self.completed_set = set()
+        self.in_progress_set = set()
+        self.total_count = len(missing_images)
+        self.completed_count = 0
+
+    def prioritize(self, img_name):
+        with self.lock:
+            if img_name in self.completed_set or img_name in self.in_progress_set:
+                return
+            self.task_queue.put((0, next(self.counter), img_name))
+
+    def run(self):
+        if self.total_count == 0:
+            self.finished.emit()
+            return
+
+        session = requests.Session()
+        adapter = HTTPAdapter(pool_connections=16, pool_maxsize=16, max_retries=1)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+
+        for idx, img in enumerate(self.missing_images):
+            priority_level = 1 if idx < self.priority_count else 2
+            self.task_queue.put((priority_level, next(self.counter), img))
+
+        def worker_loop():
+            while not self.is_cancelled:
+                try:
+                    prio, _, img_name = self.task_queue.get(timeout=0.2)
+                except queue.Empty:
+                    with self.lock:
+                        if self.completed_count >= self.total_count:
+                            break
+                    continue
+
+                with self.lock:
+                    if img_name in self.completed_set:
+                        self.task_queue.task_done()
+                        continue
+                    self.in_progress_set.add(img_name)
+
+                urls = self.url_resolver(img_name)
+                local_path = os.path.join(CACHE_DIR, img_name)
+                success = False
+
+                for url in urls:
+                    if self.is_cancelled:
+                        break
+                    try:
+                        resp = session.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+                        if resp.status_code == 200 and len(resp.content) > 0:
+                            with open(local_path, 'wb') as f:
+                                f.write(resp.content)
+                            success = True
+                            break
+                    except Exception:
+                        pass
+
+                with self.lock:
+                    self.in_progress_set.discard(img_name)
+                    if img_name not in self.completed_set:
+                        self.completed_set.add(img_name)
+                        self.completed_count += 1
+                    cur_completed = self.completed_count
+
+                self.task_queue.task_done()
+
+                if success:
+                    self.image_loaded.emit(img_name)
+                self.progress.emit(cur_completed, self.total_count)
+
+        threads = []
+        for _ in range(10):
+            t_thread = threading.Thread(target=worker_loop)
+            t_thread.daemon = True
+            t_thread.start()
+            threads.append(t_thread)
+
+        for t_thread in threads:
+            t_thread.join()
+
+        try:
+            session.close()
+        except Exception:
+            pass
+        self.finished.emit()
+
+    def cancel(self):
+        self.is_cancelled = True
 
 class EditorBackendMixin:
     def open_rsdb_folder(self):
@@ -24,6 +133,18 @@ class EditorBackendMixin:
         folder_path = QFileDialog.getExistingDirectory(self, t("btn_open"), last_dir)
         if not folder_path: return
             
+        rsdb_subfolder = os.path.join(folder_path, "RSDB")
+        if os.path.isdir(rsdb_subfolder):
+            folder_path = rsdb_subfolder
+        else:
+            try:
+                for item in os.listdir(folder_path):
+                    if item.lower() == "rsdb" and os.path.isdir(os.path.join(folder_path, item)):
+                        folder_path = os.path.join(folder_path, item)
+                        break
+            except Exception as e:
+                log(f"[RSDB] Error searching for RSDB subfolder: {e}")
+
         set_last_rsdb_dir(folder_path)
         self.current_folder_path = folder_path
         self.estimate_and_display_version(folder_path)
@@ -40,6 +161,7 @@ class EditorBackendMixin:
         self.weapon_main_file = None
         self.weapon_sub_file = None
         self.weapon_special_file = None
+        self.badge_file = None
         
         dctx = zstd.ZstdDecompressor()
         
@@ -60,6 +182,7 @@ class EditorBackendMixin:
                     if file.startswith("WeaponInfoMain.Product."): self.weapon_main_file = file
                     elif file.startswith("WeaponInfoSub.Product."): self.weapon_sub_file = file
                     elif file.startswith("WeaponInfoSpecial.Product."): self.weapon_special_file = file
+                    elif file.startswith("BadgeInfo.Product."): self.badge_file = file
                     
                 except Exception as e:
                     log(f"[RSDB] Error loading {file}: {e}")
@@ -93,7 +216,7 @@ class EditorBackendMixin:
             self.modified_files.add(self.current_table_name)
             
         if not self.modified_files:
-            QMessageBox.information(self, t("success_title"), "Aucun fichier n'a été modifié, aucune sauvegarde nécessaire.")
+            QMessageBox.information(self, t("success_title"), t("msg_no_modifications"))
             return
 
         out_dir = QFileDialog.getExistingDirectory(self, t("btn_save"), get_last_save_dir())
@@ -123,14 +246,14 @@ class EditorBackendMixin:
                 saved_count += 1
             except Exception as e:
                 log(f"[RSDB] Error saving {file_name}: {e}")
-                QMessageBox.critical(self, t("err_title"), f"Erreur de sauvegarde {file_name} : {e}")
+                QMessageBox.critical(self, t("err_title"), t("err_save_failed", file_name, str(e)))
                 return
                 
         if saved_count > 0:
             self.modified_files.clear()
-            QMessageBox.information(self, t("success_title"), f"{t('msg_save_success')} ({saved_count} fichier(s) modifié(s))")
+            QMessageBox.information(self, t("success_title"), t("msg_save_success_count", saved_count))
         else:
-            QMessageBox.information(self, t("success_title"), "Aucun fichier n'a été modifié, aucune sauvegarde nécessaire.")
+            QMessageBox.information(self, t("success_title"), t("msg_no_modifications"))
 
     def estimate_and_display_version(self, folder_path):
         codes = []
@@ -161,6 +284,8 @@ class EditorBackendMixin:
             return ["https://github.com/JeremKOYTB/Splatoon3-RSDBEditor/blob/main/cache/Wsp_SpDroneBuddySdodr00.png?raw=true"]
         elif img_filename == "Wsp_Shachihoko.png": 
             return ["https://leanny.github.io/splat3/images/weapon/Wsp_Shachihoko.png"]
+        elif img_filename.startswith("Badge_"): 
+            return [f"https://leanny.github.io/splat3/images/badge/{img_filename}"]
         elif img_filename.startswith("Wsp_") or img_filename.startswith("Wsb_"): 
             return [f"https://leanny.github.io/splat3/images/subspe/{img_filename}"]
         elif img_filename.startswith("Path_"): 
@@ -174,80 +299,115 @@ class EditorBackendMixin:
 
     def start_global_cache(self):
         log("[CACHE] Initializing cache verification...")
-        expected_images = {"Dummy.png"}
         
+        self.finalize_rsdb_load()
+
+        ordered_images = []
+        seen = set()
+        priority_seen = set()
+
+        priority_imgs = []
+        if getattr(self, 'is_easy_mode', False):
+            if getattr(self, 'easy_mode_page', 0) == 0:
+                curr_item = getattr(self, 'table_w', None) and self.table_w.currentItem()
+                curr_idx = curr_item.data(Qt.ItemDataRole.UserRole) if curr_item else 0
+                if isinstance(curr_idx, int) and self.weapon_main_file and self.weapon_main_file in self.rsdb_data:
+                    if 0 <= curr_idx < len(self.rsdb_data[self.weapon_main_file]):
+                        w_data = self.rsdb_data[self.weapon_main_file][curr_idx]
+                        _, w_img, _, _ = self.data_manager.guess_image_and_name(w_data.get("__RowId", ""))
+                        if w_img:
+                            priority_imgs.append(w_img)
+                        sub_p = w_data.get("SubWeapon", "")
+                        for p, _, im, _ in getattr(self, 'sub_options', []):
+                            if p == sub_p and im:
+                                priority_imgs.append(im)
+                                break
+                        sp_p = w_data.get("SpecialWeapon", "")
+                        for p, _, im, _ in getattr(self, 'special_options', []):
+                            if p == sp_p and im:
+                                priority_imgs.append(im)
+                                break
+
+                if getattr(self, '_current_weapon_img', None):
+                    priority_imgs.append(self._current_weapon_img)
+
+                if hasattr(self, 'table_w'):
+                    for r in range(min(self.table_w.rowCount(), 30)):
+                        it = self.table_w.item(r, 0)
+                        if it:
+                            im = it.data(Qt.ItemDataRole.UserRole + 1)
+                            if im:
+                                priority_imgs.append(im)
+            else:
+                if hasattr(self, 'badge_list_w'):
+                    for r in range(min(self.badge_list_w.count(), 50)):
+                        b_it = self.badge_list_w.item(r)
+                        if b_it:
+                            im = b_it.data(Qt.ItemDataRole.UserRole + 1)
+                            if im:
+                                priority_imgs.append(im)
+
+        for img in priority_imgs:
+            if img and img not in seen:
+                seen.add(img)
+                priority_seen.add(img)
+                ordered_images.append(img)
+
+        badge_imgs = []
+        if self.badge_file and self.badge_file in self.rsdb_data:
+            for b in self.rsdb_data[self.badge_file]:
+                _, img = self.data_manager.guess_badge_info(b)
+                badge_imgs.append(img)
+
+        weapon_imgs = []
         if self.weapon_main_file and self.weapon_main_file in self.rsdb_data:
             for w in self.rsdb_data[self.weapon_main_file]:
                 _, img, _, _ = self.data_manager.guess_image_and_name(w.get("__RowId", ""))
-                expected_images.add(img)
-                
+                weapon_imgs.append(img)
+
+        first_group = badge_imgs if getattr(self, 'easy_mode_page', 0) == 1 else weapon_imgs
+        second_group = weapon_imgs if getattr(self, 'easy_mode_page', 0) == 1 else badge_imgs
+
+        for img in first_group + second_group:
+            if img and img not in seen:
+                seen.add(img)
+                ordered_images.append(img)
+
         if self.weapon_sub_file and self.weapon_sub_file in self.rsdb_data:
             for w in self.rsdb_data[self.weapon_sub_file]:
                 _, img, _, _ = self.data_manager.guess_image_and_name(w.get("__RowId", ""))
-                expected_images.add(img)
+                if img and img not in seen:
+                    seen.add(img)
+                    ordered_images.append(img)
 
         if self.weapon_special_file and self.weapon_special_file in self.rsdb_data:
             for w in self.rsdb_data[self.weapon_special_file]:
                 _, img, _, _ = self.data_manager.guess_image_and_name(w.get("__RowId", ""))
-                expected_images.add(img)
+                if img and img not in seen:
+                    seen.add(img)
+                    ordered_images.append(img)
 
-        missing_images = set()
-        for img in expected_images:
+        missing_images = []
+        priority_count = 0
+        for img in ordered_images:
             path = os.path.join(CACHE_DIR, img)
             if not os.path.exists(path) or os.path.getsize(path) == 0:
-                missing_images.add(img)
-                
+                missing_images.append(img)
+                if img in priority_seen:
+                    priority_count += 1
+
         if missing_images:
-            has_existing_cache = os.path.exists(CACHE_DIR) and len(os.listdir(CACHE_DIR)) > 5
-            
-            self.cache_worker = CacheBuilderWorker(missing_images, self.get_image_urls)
-            self._pending_missing_images = missing_images
-            
-            if has_existing_cache:
-                log("[CACHE] Local cache detected. Checking for new images in background...")
-                self.cache_worker.finished.connect(self.on_background_cache_finished)
-                self.cache_worker.start()
-                self.finalize_rsdb_load()
-            else:
-                log("[CACHE] Cache missing or incomplete. Displaying download window...")
-                self.cache_worker.progress.connect(self.update_cache_progress)
-                self.cache_worker.finished.connect(self.on_cache_finished)
-                
-                self.cache_dialog = CacheDialog(self)
-                self.cache_dialog.progress.setMaximum(len(missing_images))
-                self.cache_dialog.show()
-                self.cache_worker.start()
+            if hasattr(self, 'cache_worker') and self.cache_worker and self.cache_worker.isRunning():
+                self.cache_worker.cancel()
+                self.cache_worker.wait()
+
+            self.cache_worker = ProgressiveCacheWorker(missing_images, self.get_image_urls, priority_count=priority_count)
+            self.cache_worker.progress.connect(self.update_cache_progress)
+            self.cache_worker.image_loaded.connect(self.on_single_image_cached)
+            self.cache_worker.finished.connect(self.on_cache_finished)
+            self.cache_worker.start()
         else:
             log("[CACHE] All images are valid and present.")
-            self.finalize_rsdb_load()
-
-    def update_cache_progress(self, current, total):
-        if hasattr(self, 'cache_dialog') and self.cache_dialog.isVisible():
-            self.cache_dialog.progress.setValue(current)
-
-    def on_cache_finished(self):
-        if hasattr(self, 'cache_dialog') and self.cache_dialog.isVisible():
-            self.cache_dialog.setWindowFlags(Qt.WindowType.Dialog)
-            self.cache_dialog.accept()
-        self.finalize_rsdb_load()
-        
-    def on_background_cache_finished(self):
-        really_missing = []
-        for img in getattr(self, '_pending_missing_images', []):
-            path = os.path.join(CACHE_DIR, img)
-            if not os.path.exists(path) or os.path.getsize(path) == 0:
-                really_missing.append(img)
-                
-        if really_missing:
-            log(f"[CACHE] Verification finished. {len(really_missing)} images not found (Normal 404 for placeholders): {', '.join(really_missing)}")
-        else:
-            log("[CACHE] Verification finished. All missing images processed successfully.")
-
-        self.build_easy_mode_options()
-        self.refresh_left_panel()
-        self._restore_table_selection()
-        if self.is_easy_mode and isinstance(self.current_table_name, int):
-            self.load_easy_mode_weapon(self.current_table_name)
 
     def show_we_notice(self):
         self.btn_we.setEnabled(False)
