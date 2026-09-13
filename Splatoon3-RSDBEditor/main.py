@@ -17,7 +17,7 @@ from main_window import SplatoonRSDBEditor
 from components import OnlineWarningDialog
 from utils import log, CONFIG_FILE
 
-APP_VERSION = "1.1.5"
+APP_VERSION = "1.1.6"
 
 if __name__ == "__main__":
     if os.name == 'nt':
